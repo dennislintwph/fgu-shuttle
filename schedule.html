@@ -125,10 +125,13 @@ function search(o,d,dep){
   var out=[];
   TRIPS.forEach(function(t){
     var times=stopTimes(t),hit=null;
-    for(var i=0;i<ROUTE.length&&!hit;i++){
+    // 在所有可行的上、下車組合中，先選最早抵達目的站的；抵達時間相同時，選乘車距離最短的
+    for(var i=0;i<ROUTE.length;i++){
       if(ROUTE[i]!==o||times[i]<dep)continue;
       for(var j=i+1;j<ROUTE.length;j++){
-        if(ROUTE[j]===d){hit={i:i,j:j};break}
+        if(ROUTE[j]!==d)continue;
+        var ride=cum[j]-cum[i];
+        if(!hit||cum[j]<hit.c||(cum[j]===hit.c&&ride<hit.r)){hit={i:i,j:j,c:cum[j],r:ride}}
       }
     }
     if(hit){out.push({t:t,i:hit.i,j:hit.j,on:times[hit.i],off:times[hit.j]})}
