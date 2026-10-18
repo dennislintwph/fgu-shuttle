@@ -114,6 +114,7 @@ function dist(lat1,lng1,lat2,lng2){
   var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*r)*Math.cos(lat2*r)*Math.sin(dLng/2)*Math.sin(dLng/2);
   return 2*R*Math.asin(Math.sqrt(a));
 }
+function seqText(o){return o===8?"第 8 站":"第 "+o+"、"+(16-o)+" 站"}
 function px(lng){return (lng-B.lngMin)/(B.lngMax-B.lngMin)*B.W}
 function py(lat){return (B.latMax-lat)/(B.latMax-B.latMin)*B.H}
 function el(tag,attrs,text){
@@ -163,7 +164,7 @@ function render(lat,lng,acc){
     var a=document.createElement("span"); a.textContent=r.p.n;
     var m=document.createElement("span"); m.textContent=Math.round(r.d)+" 公尺";
     var wrap=document.createElement("span");
-    var meta=document.createElement("div"); meta.className="meta"; meta.textContent="去程第 "+r.p.order+" 站";
+    var meta=document.createElement("div"); meta.className="meta"; meta.textContent=seqText(r.p.order);
     wrap.appendChild(a); wrap.appendChild(meta);
     li.appendChild(wrap); li.appendChild(m);
     $("list").appendChild(li);
@@ -177,7 +178,7 @@ function init(){
   STOPS.forEach(function(p){
     var li=document.createElement("li");
     var a=document.createElement("span"); a.textContent=p.n;
-    var m=document.createElement("span"); m.className="meta"; m.textContent="去程第 "+p.order+" 站";
+    var m=document.createElement("span"); m.className="meta"; m.textContent=seqText(p.order);
     li.appendChild(a); li.appendChild(m); $("list").appendChild(li);
   });
 }
