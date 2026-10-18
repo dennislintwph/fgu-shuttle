@@ -175,7 +175,7 @@ $("f").addEventListener("submit",function(e){
     return;
   }
   var items=res.map(function(r){
-    return '<li><div class="main">'+r.t.name+' '+STOPS[0].n+' '+r.t.start+'</div>'+
+    return '<li><div class="main">校內 '+r.t.name+' '+STOPS[0].n+' '+r.t.start+'</div>'+
       '<div class="detail">預估 '+fmt(r.on)+' 在第 '+(r.i+1)+' 站「'+STOPS[o].n+'」上車，'+
       fmt(r.off)+' 抵達第 '+(r.j+1)+' 站「'+STOPS[d].n+'」</div></li>';
   }).join("");
