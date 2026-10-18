@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>佛光大學校內接駁車查詢</title>
+<style>
+:root{
+  --bg:#eaf0ee; --panel:#f8fbfa; --ink:#18302d; --muted:#5b726e; --line:#c9d7d3;
+  --accent:#1c6b66; --on-accent:#ffffff; --mark:#e0a21b; --err:#b3361f;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#10201e; --panel:#182b28; --ink:#e4efec; --muted:#9bb3ae; --line:#2c4440;
+    --accent:#58b8ae; --on-accent:#0b1a18; --mark:#f0b83a; --err:#f08c72;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;line-height:1.6}
+main{max-width:560px;margin:0 auto;padding:max(20px,env(safe-area-inset-top)) 16px max(40px,env(safe-area-inset-bottom))}
+h1{font-size:1.35rem;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 16px;font-size:.92rem}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+.field{margin-bottom:14px}
+label,.lbl{display:block;font-weight:600;margin-bottom:4px}
+select{font:inherit;width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.time{display:flex;align-items:center;gap:8px}
+.time select{flex:1}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--accent);padding:10px 18px;
+  background:var(--accent);color:var(--on-accent);font-weight:600}
+button.ghost{background:transparent;color:var(--accent)}
+.btns{display:flex;gap:10px;flex-wrap:wrap}
+select:focus-visible,button:focus-visible{outline:3px solid var(--mark);outline-offset:2px}
+.err{color:var(--err);font-size:.88rem;margin:4px 0 0;min-height:0}
+.note{color:var(--muted);font-size:.88rem;margin:4px 0 0}
+h2{font-size:1rem;margin:0 0 4px}
+ol{list-style:none;margin:10px 0 0;padding:0}
+li{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px}
+li:first-child{border-color:var(--accent);border-width:2px}
+li .main{font-size:1.15rem;font-weight:700}
+li .detail{color:var(--muted);font-size:.88rem;margin-top:2px}
+.foot{color:var(--muted);font-size:.82rem}
+</style>
+</head>
+<body>
+<main>
+  <h1>佛光大學校內接駁車查詢</h1>
+  <p class="sub">選擇出發站點、出發時間和目的站點，查詢可以搭乘的班次。</p>
+
+  <form id="f" class="panel" novalidate>
+    <div class="field">
+      <label for="from">出發站點</label>
+      <select id="from" required></select>
+      <p class="note" id="locNote"></p>
+      <p class="err" id="fromErr" role="alert"></p>
+    </div>
+    <div class="field">
+      <span class="lbl" id="tl">出發時間</span>
+      <div class="time" role="group" aria-labelledby="tl">
+        <select id="hh" aria-label="時" required></select><span>時</span>
+        <select id="mm" aria-label="分" required></select><span>分</span>
+      </div>
+      <p class="err" id="timeErr" role="alert"></p>
+    </div>
+    <div class="field">
+      <label for="to">目的站點</label>
+      <select id="to" required></select>
+      <p class="err" id="toErr" role="alert"></p>
+    </div>
+    <div class="btns">
+      <button type="submit">查詢</button>
+      <button type="button" class="ghost" id="clear">清空條件</button>
+    </div>
+  </form>
+
+  <section id="result" aria-live="polite"></section>
+  <p class="foot">班次資料中已提供的站點時間直接採用，其餘站點是依站間距離推算的預估值，實際時間可能有差異，請以現場為準。</p>
+</main>
+
+<script>
+var STOPS=[
+  {n:"雲起樓",lat:24.8162257,lng:121.7220999},
+  {n:"雲來集(女生宿舍)",lat:24.8171,lng:121.72405},
+  {n:"雲五館(圖書館)",lat:24.815663,lng:121.723805},
+  {n:"懷恩館(體育館)",lat:24.8142698,lng:121.7240159},
+  {n:"上滴水坊",lat:24.814737,lng:121.7271296},
+  {n:"雲水軒",lat:24.8156213,lng:121.7289877},
+  {n:"雲慧樓",lat:24.8162656,lng:121.7292475},
+  {n:"海雲館(男生宿舍)",lat:24.815931,lng:121.7306819},
+  // 以下為校外站點
+  {n:"林美寮(宿舍)",lat:24.8213764,lng:121.7539537},
+  {n:"晶泉丰旅(近礁溪火車站)",lat:24.8287273,lng:121.7728586},
+  {n:"礁溪轉運站",lat:24.83115,lng:121.77764},
+  {n:"電池廠",lat:24.824571,lng:121.770744},
+  {n:"礁溪國小",lat:24.820962,lng:121.769371},
+  {n:"大忠仁愛路口",lat:24.823244,lng:121.765083}
+];
+var NCAMPUS=8; // 前 8 個為校內站點，其餘為校外站點
+// 各路線依序經過的站點（對應 STOPS 的索引）；第 N 站就是陣列的第 N 個
+var RC=[0,1,2,3,4,5,6,7,6,5,4,3,2,1,0]; // 校內線，共 15 站
+var RJ=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,8,7,6,5,4,3,2,1,0]; // 礁溪線，共 23 站
+// 班次：fix 為已知時間的站（第幾站: 時間），其餘站由程式推估
+var TRIPS=[
+  {line:"校內",name:"S-01",route:RC,fix:{1:"07:45",15:"08:00"}},
+  {line:"校內",name:"S-02",route:RC,fix:{1:"10:10",15:"10:20"}},
+  {line:"校內",name:"S-03",route:RC,fix:{1:"12:10",15:"12:20"}},
+  {line:"校內",name:"S-04",route:RC,fix:{1:"13:00",15:"13:10"}},
+  {line:"校內",name:"S-05",route:RC,fix:{1:"15:10",15:"15:20"}},
+  {line:"校內",name:"S-06",route:RC,fix:{1:"16:15",15:"16:25"}},
+  {line:"礁溪",name:"J-01",route:RJ,fix:{1:"07:15",9:"07:25",10:"07:30",11:"07:35",12:"07:37",13:"07:39",14:"07:41",15:"07:45",17:"07:55",23:"08:05"}}
+];
+
+var $=function(id){return document.getElementById(id)};
+function pad(n){return (n<10?"0":"")+n}
+function toMin(s){var p=s.split(":");return +p[0]*60+ +p[1]}
+function fmt(m){return pad(Math.floor(m/60))+":"+pad(m%60)}
+function hav(a,b){
+  var R=6371000,r=Math.PI/180,dLat=(b.lat-a.lat)*r,dLng=(b.lng-a.lng)*r;
+  var h=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLng/2)*Math.sin(dLng/2);
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+
+// 路線上每一站的累積距離
+function cumOf(route){
+  var c=[0];
+  for(var k=1;k<route.length;k++){c.push(c[k-1]+hav(STOPS[route[k-1]],STOPS[route[k]]))}
+  return c;
+}
+// 已知時間的站直接採用；其餘站依相鄰兩個已知站之間的距離比例推估
+function stopTimes(t){
+  var c=cumOf(t.route),pos=Object.keys(t.fix).map(Number).sort(function(a,b){return a-b}),out=[];
+  for(var a=0;a<pos.length-1;a++){
+    var p=pos[a],q=pos[a+1],tp=toMin(t.fix[p]),tq=toMin(t.fix[q]),span=c[q-1]-c[p-1];
+    for(var x=p;x<=q;x++){
+      out[x-1]=Math.round(tp+(tq-tp)*(span?(c[x-1]-c[p-1])/span:0));
+    }
+  }
+  return out;
+}
+
+function search(o,d,dep){
+  var out=[];
+  TRIPS.forEach(function(t){
+    var R=t.route,cum=cumOf(R),times=stopTimes(t),hit=null;
+    // 在所有可行的上、下車組合中，先選最早抵達目的站的；抵達時間相同時，選乘車距離最短的
+    for(var i=0;i<R.length;i++){
+      if(R[i]!==o||times[i]<dep)continue;
+      for(var j=i+1;j<R.length;j++){
+        if(R[j]!==d)continue;
+        var ride=cum[j]-cum[i];
+        if(!hit||cum[j]<hit.c||(cum[j]===hit.c&&ride<hit.r)){hit={i:i,j:j,c:cum[j],r:ride}}
+      }
+    }
+    if(hit){out.push({t:t,i:hit.i,j:hit.j,on:times[hit.i],off:times[hit.j]})}
+  });
+  out.sort(function(a,b){return a.on-b.on});
+  return out;
+}
+
+// 建立下拉選單
+function fillStops(sel){
+  sel.innerHTML='<option value="">請選擇</option>';
+  [["校內",0,NCAMPUS],["校外",NCAMPUS,STOPS.length]].forEach(function(g){
+    var og=document.createElement("optgroup");og.label=g[0];
+    for(var i=g[1];i<g[2];i++){var o=document.createElement("option");o.value=i;o.textContent=STOPS[i].n;og.appendChild(o)}
+    sel.appendChild(og);
+  });
+}
+function fillNums(sel,max){
+  sel.innerHTML='<option value="">--</option>';
+  for(var i=0;i<=max;i++){var o=document.createElement("option");o.value=i;o.textContent=pad(i);sel.appendChild(o)}
+}
+var from=$("from"),to=$("to"),hh=$("hh"),mm=$("mm"),touched=false;
+fillStops(from);fillStops(to);fillNums(hh,23);fillNums(mm,59);
+
+// 預設為目前時間
+var now=new Date();hh.value=now.getHours();mm.value=now.getMinutes();
+
+function clearErrors(){["fromErr","timeErr","toErr"].forEach(function(id){$(id).textContent=""})}
+function showErr(id,msg){$(id).textContent=msg}
+
+$("f").addEventListener("submit",function(e){
+  e.preventDefault();clearErrors();
+  var ok=true,first=null;
+  if(from.value===""){showErr("fromErr","請選擇出發站點。");ok=false;first=first||from}
+  if(hh.value===""||mm.value===""){showErr("timeErr","請選擇出發時間（時和分都要選）。");ok=false;first=first||(hh.value===""?hh:mm)}
+  if(to.value===""){showErr("toErr","請選擇目的站點。");ok=false;first=first||to}
+  if(ok&&from.value===to.value){showErr("toErr","目的站點不能和出發站點相同。");ok=false;first=to}
+  if(!ok){$("result").innerHTML="";if(first)first.focus();return}
+
+  var o=+from.value,d=+to.value,dep=+hh.value*60+ +mm.value;
+  var res=search(o,d,dep);
+  var head="<h2>從「"+STOPS[o].n+"」"+fmt(dep)+" 出發，前往「"+STOPS[d].n+"」</h2>";
+  if(!res.length){
+    $("result").innerHTML='<div class="panel">'+head+'<p class="note">這個時間之後沒有可以搭乘的班次。</p></div>';
+    return;
+  }
+  var items=res.map(function(r){
+    return '<li><div class="main">'+r.t.line+' '+r.t.name+' '+STOPS[0].n+' '+r.t.fix[1]+'</div>'+
+      '<div class="detail">預估 '+fmt(r.on)+' 在第 '+(r.i+1)+' 站「'+STOPS[o].n+'」上車，'+
+      fmt(r.off)+' 抵達第 '+(r.j+1)+' 站「'+STOPS[d].n+'」</div></li>';
+  }).join("");
+  $("result").innerHTML='<div class="panel">'+head+'<p class="note">依時間最接近的順序列出，共 '+res.length+' 個班次。</p><ol>'+items+'</ol></div>';
+});
+
+$("clear").addEventListener("click",function(){
+  touched=true;
+  from.value="";to.value="";hh.value="";mm.value="";
+  clearErrors();$("locNote").textContent="";$("result").innerHTML="";
+});
+from.addEventListener("change",function(){touched=true;$("locNote").textContent=""});
+
+// 以定位預選最近的出發站點
+function note(t){$("locNote").textContent=t}
+function locate(){
+  if(!navigator.geolocation){note("這個瀏覽器不支援定位，請手動選擇出發站點。");return}
+  note("定位中…");
+  navigator.geolocation.getCurrentPosition(function(p){
+    if(touched){return}
+    var me={lat:p.coords.latitude,lng:p.coords.longitude},best=0,bd=Infinity;
+    STOPS.forEach(function(s,i){var d=hav(me,s);if(d<bd){bd=d;best=i}});
+    from.value=String(best);
+    note("已依你的位置選擇最近的站點（約 "+Math.round(bd)+" 公尺），可自行修改。"+(bd>1500?"你離校園很遠，請確認是否正確。":""));
+  },function(){
+    if(!touched){note("無法取得位置，請手動選擇出發站點。")}
+  },{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
+}
+locate();
+</script>
+</body>
+</html>
