@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>佛光大學校車｜離我最近的站點</title>
+<style>
+:root{
+  --bg:#eaf0ee; --panel:#f8fbfa; --ink:#18302d; --muted:#5b726e; --line:#c9d7d3;
+  --accent:#1c6b66; --on-accent:#ffffff; --mark:#e0a21b; --route:#8fb3ac; --me:#2a5bd7;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#10201e; --panel:#182b28; --ink:#e4efec; --muted:#9bb3ae; --line:#2c4440;
+    --accent:#58b8ae; --on-accent:#0b1a18; --mark:#f0b83a; --route:#3f6b64; --me:#7fa2ff;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#10201e; --panel:#182b28; --ink:#e4efec; --muted:#9bb3ae; --line:#2c4440;
+  --accent:#58b8ae; --on-accent:#0b1a18; --mark:#f0b83a; --route:#3f6b64; --me:#7fa2ff;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;line-height:1.6}
+main{max-width:720px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:1.35rem;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 16px;font-size:.92rem}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--accent);padding:10px 16px;
+  background:var(--accent);color:var(--on-accent);font-weight:600}
+button.ghost{background:transparent;color:var(--accent)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--mark);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input{font:inherit;flex:1 1 220px;min-width:0;padding:9px 10px;border-radius:8px;border:1px solid var(--line);
+  background:var(--bg);color:var(--ink)}
+#status{color:var(--muted);font-size:.9rem;margin:10px 0 0}
+#nearest{display:none}
+#nearest .name{font-size:2rem;font-weight:700;line-height:1.2;margin:2px 0}
+#nearest .dist{font-size:1.1rem;color:var(--accent);font-weight:600}
+#nearest .note{color:var(--muted);font-size:.9rem;margin-top:6px}
+.warn{color:#b3541a}
+:root[data-theme="dark"] .warn{color:#f2a46b}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .warn{color:#f2a46b}}
+.mapwrap{overflow-x:auto}
+svg{display:block;width:100%;min-width:480px;height:auto}
+ol{list-style:none;margin:0;padding:0}
+li{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+li:first-child{border-top:0}
+li.top{font-weight:700;color:var(--accent)}
+li .meta{color:var(--muted);font-weight:400;font-size:.85rem}
+h2{font-size:1rem;margin:0 0 8px}
+</style>
+</head>
+<body>
+<main>
+  <h1>離我最近的校車站點</h1>
+  <p class="sub">佛光大學校內接駁車，共 8 個站牌。</p>
+
+  <div class="panel">
+    <div class="row">
+      <button id="locate">取得我的位置</button>
+      <button id="watch" class="ghost">持續更新</button>
+    </div>
+    <p id="status">按下按鈕後，瀏覽器會詢問是否允許存取位置。</p>
+    <div class="row" style="margin-top:10px">
+      <input id="manual" type="text" inputmode="decimal" placeholder="或手動貼上座標，例如 24.8162, 121.7221" aria-label="手動輸入座標">
+      <button id="manualBtn" class="ghost">用這個座標</button>
+    </div>
+  </div>
+
+  <div class="panel" id="nearest" aria-live="polite">
+    <div class="sub" style="margin:0">最近的站點</div>
+    <div class="name" id="nName"></div>
+    <div class="dist" id="nDist"></div>
+    <div class="note" id="nNote"></div>
+  </div>
+
+  <div class="panel">
+    <h2>校園地圖</h2>
+    <div class="mapwrap"><svg id="map" viewBox="0 0 640 276" role="img" aria-label="校車站點示意圖"></svg></div>
+  </div>
+
+  <div class="panel">
+    <h2>各站距離</h2>
+    <ol id="list"></ol>
+  </div>
+</main>
+
+<script>
+// 站點：order 為去程順序（回程同一站牌反向經過）
+var STOPS = [
+  {n:"雲起樓（起點／終點）", s:"雲起樓", lat:24.8162257, lng:121.7220999, order:1, lx:8,  ly:-8, a:"start"},
+  {n:"雲來集（女生宿舍）",   s:"雲來集", lat:24.8171,    lng:121.72405,   order:2, lx:8,  ly:-6, a:"start"},
+  {n:"雲五館（圖書館）",     s:"雲五館", lat:24.815663,  lng:121.723805,  order:3, lx:10, ly:4,  a:"start"},
+  {n:"懷恩館（體育館）",     s:"懷恩館", lat:24.8142698, lng:121.7240159, order:4, lx:10, ly:4,  a:"start"},
+  {n:"上滴水坊",             s:"上滴水坊", lat:24.814737, lng:121.7271296, order:5, lx:0,  ly:20, a:"middle"},
+  {n:"雲水軒",               s:"雲水軒", lat:24.8156213, lng:121.7289877, order:6, lx:0,  ly:20, a:"middle"},
+  {n:"雲慧樓",               s:"雲慧樓", lat:24.8162656, lng:121.7292475, order:7, lx:0,  ly:-12,a:"middle"},
+  {n:"海雲館（男生宿舍）",   s:"海雲館", lat:24.815931,  lng:121.7306819, order:8, lx:-4, ly:22, a:"end"}
+];
+var B = {lngMin:121.7212, lngMax:121.7316, latMin:24.8136, latMax:24.8177, W:640, H:276};
+var NS = "http://www.w3.org/2000/svg";
+var $ = function(id){return document.getElementById(id)};
+
+function dist(lat1,lng1,lat2,lng2){
+  var R=6371000, r=Math.PI/180;
+  var dLat=(lat2-lat1)*r, dLng=(lng2-lng1)*r;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*r)*Math.cos(lat2*r)*Math.sin(dLng/2)*Math.sin(dLng/2);
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+function px(lng){return (lng-B.lngMin)/(B.lngMax-B.lngMin)*B.W}
+function py(lat){return (B.latMax-lat)/(B.latMax-B.latMin)*B.H}
+function el(tag,attrs,text){
+  var e=document.createElementNS(NS,tag);
+  for(var k in attrs){e.setAttribute(k,attrs[k])}
+  if(text!==undefined){e.textContent=text}
+  return e;
+}
+
+function drawMap(user, nearest){
+  var svg=$("map"); svg.innerHTML="";
+  var pts=STOPS.map(function(p){return px(p.lng).toFixed(1)+","+py(p.lat).toFixed(1)}).join(" ");
+  svg.appendChild(el("polyline",{points:pts,fill:"none",stroke:"var(--route)","stroke-width":4,"stroke-linecap":"round","stroke-linejoin":"round"}));
+  STOPS.forEach(function(p){
+    var x=px(p.lng), y=py(p.lat), hit=nearest&&nearest===p;
+    svg.appendChild(el("circle",{cx:x,cy:y,r:hit?9:6,fill:hit?"var(--mark)":"var(--panel)",stroke:hit?"var(--ink)":"var(--accent)","stroke-width":2.5}));
+    svg.appendChild(el("text",{x:x+p.lx,y:y+p.ly,"text-anchor":p.a,"font-size":13,"font-weight":hit?700:500,fill:"var(--ink)"},p.s));
+  });
+  if(user){
+    var ux=px(user.lng), uy=py(user.lat);
+    if(ux>=0&&ux<=B.W&&uy>=0&&uy<=B.H){
+      svg.appendChild(el("circle",{cx:ux,cy:uy,r:11,fill:"none",stroke:"var(--me)","stroke-width":2,opacity:.45}));
+      svg.appendChild(el("circle",{cx:ux,cy:uy,r:5,fill:"var(--me)"}));
+      svg.appendChild(el("text",{x:ux+10,y:uy-10,"font-size":13,"font-weight":700,fill:"var(--me)"},"我"));
+    }
+  }
+}
+
+function render(lat,lng,acc){
+  var user={lat:lat,lng:lng};
+  var rows=STOPS.map(function(p){return {p:p,d:dist(lat,lng,p.lat,p.lng)}}).sort(function(a,b){return a.d-b.d});
+  var best=rows[0], second=rows[1];
+  $("nearest").style.display="block";
+  $("nName").textContent=best.p.n;
+  $("nDist").textContent="約 "+Math.round(best.d)+" 公尺";
+  var notes=[];
+  if(best.d>1500){notes.push("你的位置離校園很遠，這個結果僅供參考。")}
+  if(typeof acc==="number"&&isFinite(acc)){
+    notes.push("定位誤差約 ±"+Math.round(acc)+" 公尺。");
+    if(acc>(second.d-best.d)){notes.push("誤差大於最近兩站的距離差，實際最近的站點可能是「"+second.p.s+"」。")}
+  }
+  var note=$("nNote"); note.textContent=notes.join(" ");
+  note.className="note"+(notes.join("").indexOf("可能是")>-1?" warn":"");
+  $("list").innerHTML="";
+  rows.forEach(function(r,i){
+    var li=document.createElement("li"); if(i===0){li.className="top"}
+    var a=document.createElement("span"); a.textContent=r.p.n;
+    var m=document.createElement("span"); m.textContent=Math.round(r.d)+" 公尺";
+    var wrap=document.createElement("span");
+    var meta=document.createElement("div"); meta.className="meta"; meta.textContent="去程第 "+r.p.order+" 站";
+    wrap.appendChild(a); wrap.appendChild(meta);
+    li.appendChild(wrap); li.appendChild(m);
+    $("list").appendChild(li);
+  });
+  drawMap(user,best.p);
+}
+
+function init(){
+  drawMap(null,null);
+  $("list").innerHTML="";
+  STOPS.forEach(function(p){
+    var li=document.createElement("li");
+    var a=document.createElement("span"); a.textContent=p.n;
+    var m=document.createElement("span"); m.className="meta"; m.textContent="去程第 "+p.order+" 站";
+    li.appendChild(a); li.appendChild(m); $("list").appendChild(li);
+  });
+}
+
+var watchId=null;
+function status(t){$("status").textContent=t}
+function onPos(pos){
+  status("定位成功（"+new Date().toLocaleTimeString("zh-TW")+"）");
+  render(pos.coords.latitude,pos.coords.longitude,pos.coords.accuracy);
+}
+function onErr(err){
+  var msg={1:"你拒絕了位置存取。請在瀏覽器設定允許，或改用下方手動輸入座標。",
+           2:"目前無法取得位置，請稍後再試，或改用手動輸入座標。",
+           3:"定位逾時，請再試一次，或改用手動輸入座標。"}[err.code]||"定位失敗，請改用手動輸入座標。";
+  status(msg);
+}
+function geoOK(){
+  if(!navigator.geolocation){status("這個瀏覽器不支援定位，請改用手動輸入座標。");return false}
+  return true;
+}
+var opts={enableHighAccuracy:true,timeout:15000,maximumAge:0};
+$("locate").addEventListener("click",function(){
+  if(!geoOK())return;
+  status("定位中…");
+  try{navigator.geolocation.getCurrentPosition(onPos,onErr,opts)}catch(e){onErr({code:2})}
+});
+$("watch").addEventListener("click",function(){
+  if(!geoOK())return;
+  if(watchId!==null){
+    navigator.geolocation.clearWatch(watchId); watchId=null;
+    $("watch").textContent="持續更新"; status("已停止持續更新。"); return;
+  }
+  status("定位中…");
+  try{watchId=navigator.geolocation.watchPosition(onPos,onErr,opts); $("watch").textContent="停止更新"}
+  catch(e){onErr({code:2})}
+});
+function doManual(){
+  var m=$("manual").value.match(/-?\d+(?:\.\d+)?/g);
+  if(!m||m.length<2){status("請輸入「緯度, 經度」，例如 24.8162, 121.7221。");return}
+  var lat=parseFloat(m[0]), lng=parseFloat(m[1]);
+  if(lat<-90||lat>90||lng<-180||lng>180){status("座標超出範圍，請確認緯度在前、經度在後。");return}
+  status("使用手動輸入的座標。");
+  render(lat,lng);
+}
+$("manualBtn").addEventListener("click",doManual);
+$("manual").addEventListener("keydown",function(e){if(e.key==="Enter"){doManual()}});
+init();
+</script>
+</body>
+</html>
