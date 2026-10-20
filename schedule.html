@@ -67,6 +67,9 @@ td input,td select{width:100%}
       <p class="err" id="timeErr" role="alert"></p></div>
     <div class="field"><label for="to">目的站點</label><select id="to" required></select>
       <p class="err" id="toErr" role="alert"></p></div>
+    <div class="field"><label for="rng">班次顯示範圍</label><select id="rng">
+      <option value="60" selected>出發時間後 1 小時內的班次</option><option value="120">出發時間後 2 小時內的班次</option>
+      <option value="after">出發時間後的所有班次</option><option value="all">當天所有班次</option></select></div>
     <div class="row"><button type="submit">查詢</button><button type="button" class="g" id="clear">清空條件</button></div>
   </form>
   <section id="result" aria-live="polite"></section>
@@ -104,7 +107,12 @@ td input,td select{width:100%}
 </main>
 
 <script>
-var WINDOW=120,dirty=false,EXCL={"礁溪線":1,"宜蘭線":1,"礁宜線":1};
+var RG={
+  "60":{w:60,m:"出發時間後 1 小時內",n:"只列出當天適用、出發時間後 1 小時內的班次，依時間最接近的順序排列"},
+  "120":{w:120,m:"出發時間後 2 小時內",n:"只列出當天適用、出發時間後 2 小時內的班次，依時間最接近的順序排列"},
+  "after":{w:0,m:"出發時間後",n:"只列出當天適用、出發時間後的所有班次，依時間最接近的順序排列"},
+  "all":{w:0,m:"當天",n:"列出當天適用的所有班次，依班次出發時間由早到晚排列"}};
+var dirty=false,EXCL={"礁溪線":1,"宜蘭線":1,"礁宜線":1};
 var LINES=["校內線","礁溪線","宜蘭線","礁宜線","台灣好行"];
 var WD=[["一",1],["二",2],["三",3],["四",4],["五",5],["六",6],["日",0]];
 
@@ -160,7 +168,7 @@ function appText(t){
 }
 
 // ---------- 查詢 ----------
-function search(o,d,dep,today){
+function search(o,d,dep,today,rg){
   var out=[],R=registry(),pri={};
   // 優先級規則：某路線當天若有「優先」班次，該路線的「普通」班次就不列入
   trips.forEach(function(t){if(applies(t,today)&&t.priority==="優先")pri[t.line]=true});
@@ -172,7 +180,8 @@ function search(o,d,dep,today){
     var S=t.stops,cum=cumOf(S),times=estimate(S),hit=null;
     // 先選最早抵達目的站的上、下車組合；抵達時間相同時選乘車距離最短的
     for(var i=0;i<S.length;i++){
-      if(S[i].name!==o||times[i]<dep||times[i]>dep+WINDOW)continue;
+      if(S[i].name!==o)continue;
+      if(rg!=="all"&&(times[i]<dep||(RG[rg].w&&times[i]>dep+RG[rg].w)))continue;
       for(var j=i+1;j<S.length;j++){
         if(S[j].name!==d)continue;
         var ride=cum[j]-cum[i];
@@ -181,7 +190,7 @@ function search(o,d,dep,today){
     }
     if(hit)out.push({t:t,i:hit.i,j:hit.j,on:times[hit.i],off:times[hit.j]});
   });
-  out.sort(function(a,b){return a.on-b.on});
+  out.sort(function(a,b){return rg==="all"?toMin(a.t.stops[0].time)-toMin(b.t.stops[0].time)||a.on-b.on:a.on-b.on});
   return out;
 }
 function fillNums(sel,max){
@@ -214,20 +223,20 @@ $("f").addEventListener("submit",function(e){
   if(to.value===""){$("toErr").textContent="請選擇目的站點。";ok=false;first=first||to}
   if(ok&&from.value===to.value){$("toErr").textContent="目的站點不能和出發站點相同。";ok=false;first=to}
   if(!ok){$("result").innerHTML="";if(first)first.focus();return}
-  var o=from.value,d=to.value,dep=+hh.value*60+ +mm.value,dp=$("dd").value.split("-"),res=search(o,d,dep,new Date(+dp[0],+dp[1]-1,+dp[2]));
-  var head="<h2>從「"+esc(o)+"」"+$("dd").value+" "+fmt(dep)+" 出發，前往「"+esc(d)+"」</h2>";
+  var o=from.value,d=to.value,dep=+hh.value*60+ +mm.value,dp=$("dd").value.split("-"),rg=$("rng").value,res=search(o,d,dep,new Date(+dp[0],+dp[1]-1,+dp[2]),rg);
+  var head=rg==="all"?"<h2>"+$("dd").value+" 當天從「"+esc(o)+"」前往「"+esc(d)+"」</h2>":"<h2>從「"+esc(o)+"」"+$("dd").value+" "+fmt(dep)+" 出發，前往「"+esc(d)+"」</h2>";
   if(!res.length){
-    $("result").innerHTML='<div class="panel">'+head+'<p class="note">出發時間後 2 小時內沒有可以搭乘的班次。</p></div>';return;
+    $("result").innerHTML='<div class="panel">'+head+'<p class="note">'+RG[rg].m+'沒有可以搭乘的班次。</p></div>';return;
   }
   var items=res.map(function(r){
     var s=r.t.stops;
     return '<li><div class="main">'+esc(r.t.name)+' '+esc(s[0].name)+' '+esc(s[0].time)+'</div>'+
       '<div class="detail">預估 '+fmt(r.on)+' 在第 '+(r.i+1)+' 站「'+esc(o)+'」上車，'+fmt(r.off)+' 抵達第 '+(r.j+1)+' 站「'+esc(d)+'」</div></li>';
   }).join("");
-  $("result").innerHTML='<div class="panel">'+head+'<p class="note">只列出當天適用、且在出發時間後 2 小時內的班次，依時間最接近的順序排列，共 '+res.length+' 個班次。</p><ol class="res">'+items+'</ol></div>';
+  $("result").innerHTML='<div class="panel">'+head+'<p class="note">'+RG[rg].n+'，共 '+res.length+' 個班次。</p><ol class="res">'+items+'</ol></div>';
 });
 $("clear").addEventListener("click",function(){
-  touched=true;from.value="";to.value="";$("dd").value="";hh.value="";mm.value="";
+  touched=true;from.value="";to.value="";$("dd").value="";hh.value="";mm.value="";$("rng").value="60";
   clearErrors();$("locNote").textContent="";$("result").innerHTML="";
 });
 from.addEventListener("change",function(){touched=true;$("locNote").textContent=""});
