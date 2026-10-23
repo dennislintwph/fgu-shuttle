@@ -51,7 +51,7 @@ td input,td select{width:100%}
 .grid th{text-align:center;background:var(--bg)}
 .grid td.c{background:var(--bg);background:color-mix(in srgb,var(--accent) 18%,transparent)}
 .grid td.e{cursor:pointer}
-.grid .x{float:right;height:auto;padding:0 6px;border:0;background:none;color:var(--err)}
+.grid .x{display:block;margin:2px 0 0 auto;height:auto;padding:0 6px;border:0;background:none;color:var(--err)}
 </style>
 </head>
 <body>
@@ -348,8 +348,8 @@ function drawCourses(){
       var cs=TT.rows.filter(function(r){return r.wd===w&&p>=r.p&&p<r.p+r.n});
       if(!cs.length){h+='<td class="e" data-wd="'+w+'" data-p="'+p+'" title="點一下，帶入這個時段"></td>';return}
       h+='<td class="c">'+cs.map(function(r){
-        return (r.p===p?'<button type="button" class="x" data-id="'+r.id+'" aria-label="刪除 '+esc(r.name||r.room)+'" title="刪除這門課">×</button>':'')+
-          '<div title="對應站點：'+esc(roomStop(r.room)||"")+'">'+esc(r.name||"（未命名）")+'<br><span class="note">'+esc(r.room)+'</span></div>';
+        return '<div title="對應站點：'+esc(roomStop(r.room)||"")+'">'+esc(r.name||"（未命名）")+'<br><span class="note">'+esc(r.room)+'</span></div>'+
+          (p===r.p+r.n-1?'<button type="button" class="x" data-id="'+r.id+'" aria-label="刪除 '+esc(r.name||r.room)+'" title="刪除這門課">×</button>':'');
       }).join("")+'</td>';
     });
     h+='</tr>';
