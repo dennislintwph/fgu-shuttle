@@ -363,6 +363,12 @@ $("cAdd").onclick=function(){
   if(!room){e.textContent="請輸入教室。";return}
   if(p+n-1>12){e.textContent="連續節數超過第十二節。";return}
   if(!roomStop(room)){e.textContent="無法判斷「"+room+"」在哪一棟建築，請輸入如 N207、504-1，或建築名稱（例如 懷恩館籃球場）。";return}
+  // 時間衝突檢查：同一天、節次有重疊的課不能同時存在（修改時不和自己比）
+  var bad=TT.rows.filter(function(r){return r.id!==editId&&r.wd===wd&&r.p<=p+n-1&&p<=r.p+r.n-1});
+  if(bad.length){
+    e.textContent="與"+bad.map(function(r){return "「"+(r.name||r.room)+"（第"+PN[r.p-1]+(r.n>1?"–"+PN[r.p+r.n-2]:"")+"節）」"}).join("、")+"時間衝突，無法儲存。";
+    return;
+  }
   e.textContent="";
   var row=editId&&TT.rows.filter(function(r){return r.id===editId})[0];
   if(row){row.wd=wd;row.p=p;row.n=n;row.name=$("cName").value.trim();row.room=room}
