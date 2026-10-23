@@ -66,7 +66,7 @@ td input,td select{width:100%}
         <select id="mm" aria-label="分" required></select><span>分</span></div>
       <p class="err" id="timeErr" role="alert"></p></div>
     <div class="field"><label for="to">目的站點</label><select id="to" required></select>
-      <p class="err" id="toErr" role="alert"></p></div>
+      <p class="note" id="toNote"></p><p class="err" id="toErr" role="alert"></p></div>
     <div class="field"><label for="rng">班次顯示範圍</label><select id="rng">
       <option value="120" selected>出發時間後 2 小時內的班次</option>
       <option value="after">出發時間後的所有班次</option><option value="all">當天所有班次</option></select></div>
@@ -88,7 +88,7 @@ td input,td select{width:100%}
     <div class="row">
       <div class="field"><label for="cWd">星期</label><select id="cWd"></select></div>
       <div class="field"><label for="cP">起始節次</label><select id="cP"></select></div>
-      <div class="field"><label for="cN">連續堂數</label><select id="cN"></select></div>
+      <div class="field"><label for="cN">連續節數</label><select id="cN"></select></div>
     </div>
     <div class="row">
       <div class="field"><label for="cName">課名（選填）</label><input id="cName"></div>
@@ -101,7 +101,7 @@ td input,td select{width:100%}
   </div>
   <div class="panel">
     <h2>預覽提醒</h2>
-    <p class="note">提醒時間是上課前 50 分鐘（回住處是下課前 10 分鐘）。目前只是預覽，尚未真的發送通知。</p>
+    <p class="note">提醒時間：當天第一堂課前 1 小時、最後一堂課下課前 10 分鐘；整天沒課就沒有提醒。目前只是預覽，尚未真的發送通知。</p>
     <div class="row" style="margin-top:8px"><input type="date" id="pvDate" aria-label="日期"><button type="button" id="pvGo">預覽這天的提醒</button></div>
     <div id="pvOut" aria-live="polite"></div>
   </div>
@@ -144,7 +144,7 @@ function setEst(t){var m=estimate(t.stops);t.stops.forEach(function(s,i){s.est=f
 
 // ---------- 資料 ----------
 var trips=[];
-function ready(first){refreshOptions();if(TT.home)$("hm").value=TT.home;drawCourses();if(first)locate()}
+function ready(first){refreshOptions();if(TT.home)$("hm").value=TT.home;drawCourses();autoDest();if(first)locate()}
 fetch("trips.json",{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(d){
   if(!Array.isArray(d.trips))throw 0;
   trips=d.trips;ready(true);
@@ -238,7 +238,7 @@ $("f").addEventListener("submit",function(e){
   $("result").innerHTML='<div class="panel">'+head+'<p class="note">'+RG[rg].n+'，共 '+res.length+' 個班次。</p><ol class="res">'+items+'</ol></div>';
 });
 $("clear").addEventListener("click",function(){
-  touched=true;from.value="";to.value="";$("dd").value="";hh.value="";mm.value="";$("rng").value="120";
+  touched=true;toTouched=true;$("toNote").textContent="";from.value="";to.value="";$("dd").value="";hh.value="";mm.value="";$("rng").value="120";
   clearErrors();$("locNote").textContent="";$("result").innerHTML="";
 });
 from.addEventListener("change",function(){touched=true;$("locNote").textContent=""});
@@ -258,11 +258,11 @@ function locate(){
 }
 
 // ---------- 分頁 ----------
-function tab(n){["1","3"].forEach(function(k){$("p"+k).hidden=k!==n;$("tab"+k).setAttribute("aria-selected",k===n)})}
+function tab(n){["1","3"].forEach(function(k){$("p"+k).hidden=k!==n;$("tab"+k).setAttribute("aria-selected",k===n)});if(n==="1")autoDest()}
 $("tab1").onclick=function(){tab("1")};$("tab3").onclick=function(){tab("3")};
 
 // ---------- 課表提醒 ----------
-var LEAD=50,LEAD_END=10,RET_WIN=60,BUF=5,TKEY="fgu-timetable-v1";
+var LEAD=60,LEAD_END=10,TKEY="fgu-timetable-v1",toTouched=false;
 var PER=[["08:10","09:00"],["09:10","10:00"],["10:20","11:10"],["11:20","12:10"],["13:10","14:00"],["14:10","15:00"],["15:20","16:10"],["16:20","17:10"],["17:20","18:10"],["18:20","19:10"],["19:20","20:10"],["20:20","21:10"]];
 var PN=["一","二","三","四","五","六","七","八","九","十","十一","十二"];
 var WORD=["日","一","二","三","四","五","六"],ORD=[1,2,3,4,5,6,0];
@@ -284,29 +284,29 @@ function blocksOf(wd){
     return {s:toMin(PER[r.p-1][0]),e:toMin(PER[r.p+r.n-2][1]),r:r,stop:roomStop(r.room)};
   });
 }
-function busList(o,d,date,ok,desc){
-  return search(o,d,0,date,"all",ok).sort(function(a,b){return desc?b.off-a.off:a.on-b.on}).slice(0,3);
+function busList(o,d,date,ok){
+  return search(o,d,0,date,"all",ok).sort(function(a,b){return a.on-b.on});
 }
-// 產生某一天的提醒：第一堂課前、換教室前、最後一堂課下課前
+// 提醒規則：整天沒課就沒有提醒；第一堂課前 1 小時提醒去上課；最後一堂課下課前 10 分鐘提醒回住處
 function reminders(date){
   var B=blocksOf(date.getDay()),out=[];
-  B.forEach(function(b,k){
-    var from=k?B[k-1].stop:TT.home,prevEnd=k?B[k-1].e:0;
-    if(!from||!b.stop||from===b.stop)return;
-    var at=b.s-LEAD,lo=Math.max(at,prevEnd),dl=b.s-BUF;
-    out.push({at:at,kind:k?"換教室":"去上課",from:from,to:b.stop,b:b,
-      buses:busList(from,b.stop,date,function(on,off){return on>=lo&&off<=dl},true)});
-  });
-  if(B.length){
-    var L=B[B.length-1];
-    if(TT.home&&L.stop&&TT.home!==L.stop)out.push({at:L.e-LEAD_END,kind:"回住處",from:L.stop,to:TT.home,b:L,
-      buses:busList(L.stop,TT.home,date,function(on){return on>=L.e&&on<=L.e+RET_WIN},false)});
-  }
+  if(!B.length)return out;
+  var F=B[0],L=B[B.length-1],home=TT.home;
+  if(home&&F.stop&&home!==F.stop)out.push({at:F.s-LEAD,kind:"去上課",from:home,to:F.stop,b:F,
+    buses:busList(home,F.stop,date,function(on,off){return on>=F.s-LEAD&&on<=F.s&&off<F.s})});
+  if(home&&L.stop&&home!==L.stop)out.push({at:L.e-LEAD_END,kind:"回住處",from:L.stop,to:home,b:L,
+    buses:busList(L.stop,home,date,function(on){return on>=L.e})});
   return out.sort(function(a,b){return a.at-b.at});
+}
+// 第一堂課開始 1 分鐘後、最後一堂課開始前，回傳「現在之後最接近的下一堂課」；當天只有一堂課時不帶入
+function nextClass(n){
+  var m=n.getHours()*60+n.getMinutes(),B=blocksOf(n.getDay());
+  if(B.length<2||m<=B[0].s||m>=B[B.length-1].s)return null;
+  return B.filter(function(b){return b.s>m})[0]||null;
 }
 function card(r){
   var b=r.b,nm=esc(b.r.name||"（未命名）")+" "+esc(b.r.room),t;
-  if(r.kind==="回住處")t=fmt(b.e)+" 下課（"+nm+"），從「"+esc(r.from)+"」回「"+esc(r.to)+"」，列出下課後 1 小時內的班次";
+  if(r.kind==="回住處")t=fmt(b.e)+" 下課（"+nm+"），從「"+esc(r.from)+"」回「"+esc(r.to)+"」，列出下課後的所有班次";
   else t=fmt(b.s)+" 在「"+esc(r.to)+"」上課（"+nm+"），從「"+esc(r.from)+"」前往";
   var bus=r.buses.length?"<ol>"+r.buses.map(function(x){var S=x.t.stops;
     return '<li><div class="main" style="font-size:1rem">'+esc(x.t.name)+" "+esc(S[0].name)+" "+esc(S[0].time)+'</div><div class="detail">'+
@@ -315,9 +315,19 @@ function card(r){
   return '<div class="panel" style="margin:10px 0 0"><div class="main" style="font-size:1rem">'+fmt(r.at)+" 提醒｜"+r.kind+'</div><div class="detail">'+t+"</div>"+bus+"</div>";
 }
 /*UI*/
+// 查詢頁的目的站點自動帶入下一堂課的地點（使用者自己改過或清空後就不再自動帶入）
+function autoDest(){
+  if(toTouched)return;
+  var nx=nextClass(new Date());
+  if(!nx||!nx.stop)return;
+  to.value=nx.stop;
+  if(to.value!==nx.stop){to.value="";return}
+  $("toNote").textContent="已帶入下一堂課的地點："+fmt(nx.s)+" "+(nx.r.name||"")+" "+nx.r.room;
+}
+to.addEventListener("change",function(){toTouched=true;$("toNote").textContent=""});
 $("cWd").innerHTML=ORD.map(function(w){return '<option value="'+w+'">星期'+WORD[w]+"</option>"}).join("");
 $("cP").innerHTML=PER.map(function(p,i){return '<option value="'+(i+1)+'">第'+PN[i]+"節 "+p[0]+"–"+p[1]+"</option>"}).join("");
-$("cN").innerHTML=[1,2,3,4,5,6].map(function(n){return '<option value="'+n+'">'+n+" 堂</option>"}).join("");
+$("cN").innerHTML=[1,2,3,4,5,6].map(function(n){return '<option value="'+n+'">'+n+" 節</option>"}).join("");
 $("pvDate").value=$("dd").value;
 function drawCourses(){
   var rows=TT.rows.slice().sort(function(a,b){return ORD.indexOf(a.wd)-ORD.indexOf(b.wd)||a.p-b.p});
@@ -329,7 +339,7 @@ function drawCourses(){
 $("cAdd").onclick=function(){
   var wd=+$("cWd").value,p=+$("cP").value,n=+$("cN").value,room=$("cRoom").value.trim(),e=$("cErr");
   if(!room){e.textContent="請輸入教室。";return}
-  if(p+n-1>12){e.textContent="連續堂數超過第十二節。";return}
+  if(p+n-1>12){e.textContent="連續節數超過第十二節。";return}
   if(!roomStop(room)){e.textContent="無法判斷「"+room+"」在哪一棟建築，請輸入如 N207、504-1，或建築名稱（例如 懷恩館籃球場）。";return}
   e.textContent="";
   TT.rows.push({id:uid(),wd:wd,p:p,n:n,name:$("cName").value.trim(),room:room});
