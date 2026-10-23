@@ -49,9 +49,10 @@ td input,td select{width:100%}
 .grid{min-width:760px}
 .grid th,.grid td{border:1px solid var(--line);padding:4px 6px;vertical-align:top;font-size:.85rem;text-align:left}
 .grid th{text-align:center;background:var(--bg)}
-.grid td.c{background:var(--bg);background:color-mix(in srgb,var(--accent) 18%,transparent)}
+.grid td.sel{outline:2px solid var(--mark);outline-offset:-2px}
+.grid td.c{text-align:center;cursor:pointer;background:var(--bg);background:color-mix(in srgb,var(--accent) 18%,transparent)}
 .grid td.e{cursor:pointer}
-.grid .x{display:block;margin:2px 0 0 auto;height:auto;padding:0 6px;border:0;background:none;color:var(--err)}
+.grid .x{display:block;margin:2px auto 0;height:auto;padding:0 6px;border:0;background:none;color:var(--err)}
 </style>
 </head>
 <body>
@@ -102,11 +103,12 @@ td input,td select{width:100%}
     <div class="row al">
       <div class="field"><label for="cName">課名（選填）</label><input id="cName"></div>
       <div class="field"><label for="cRoom">教室</label><input id="cRoom" placeholder="例如 N207、504-1、懷恩館籃球場"></div>
-      <button type="button" id="cAdd">新增課程</button>
+      <button type="button" id="cAdd">新增課程</button><button type="button" class="g" id="cCancel" hidden>取消修改</button>
     </div>
+    <p class="note" id="cMode"></p>
     <p class="err" id="cErr" role="alert"></p>
     <div class="wrap"><table id="cGrid" class="grid"></table></div>
-    <p class="note">點一下空白的格子，可以帶入星期和節次；按格子裡的 × 可以刪除那門課。</p>
+    <p class="note">點一下空白的格子，可以帶入星期和節次；點一下課程可以修改；按 × 可以刪除那門課。</p>
     <p class="note">課表只存在這個瀏覽器裡，不會上傳。</p>
   </div>
   <div class="panel">
@@ -272,7 +274,7 @@ function tab(n){["1","3"].forEach(function(k){$("p"+k).hidden=k!==n;$("tab"+k).s
 $("tab1").onclick=function(){tab("1")};$("tab3").onclick=function(){tab("3")};
 
 // ---------- 課表提醒 ----------
-var LEAD=60,LEAD_END=10,TKEY="fgu-timetable-v1",toTouched=false;
+var LEAD=60,LEAD_END=10,TKEY="fgu-timetable-v1",toTouched=false,editId=null;
 var PER=[["08:10","09:00"],["09:10","10:00"],["10:20","11:10"],["11:20","12:10"],["13:10","14:00"],["14:10","15:00"],["15:20","16:10"],["16:20","17:10"],["17:20","18:10"],["18:20","19:10"],["19:20","20:10"],["20:20","21:10"]];
 var PN=["一","二","三","四","五","六","七","八","九","十","十一","十二"];
 var WORD=["日","一","二","三","四","五","六"],ORD=[1,2,3,4,5,6,0];
@@ -347,8 +349,8 @@ function drawCourses(){
     ORD.forEach(function(w){
       var cs=TT.rows.filter(function(r){return r.wd===w&&p>=r.p&&p<r.p+r.n});
       if(!cs.length){h+='<td class="e" data-wd="'+w+'" data-p="'+p+'" title="點一下，帶入這個時段"></td>';return}
-      h+='<td class="c">'+cs.map(function(r){
-        return '<div title="對應站點：'+esc(roomStop(r.room)||"")+'">'+esc(r.name||"（未命名）")+'<br><span class="note">'+esc(r.room)+'</span></div>'+
+      h+='<td class="c'+(cs.some(function(r){return r.id===editId})?' sel':'')+'" data-id="'+cs[0].id+'" title="點一下修改這門課">'+cs.map(function(r){
+        return '<div data-id="'+r.id+'" title="對應站點：'+esc(roomStop(r.room)||"")+'">'+esc(r.name||"（未命名）")+'<br><span class="note">'+esc(r.room)+'</span></div>'+
           (p===r.p+r.n-1?'<button type="button" class="x" data-id="'+r.id+'" aria-label="刪除 '+esc(r.name||r.room)+'" title="刪除這門課">×</button>':'');
       }).join("")+'</td>';
     });
@@ -362,14 +364,35 @@ $("cAdd").onclick=function(){
   if(p+n-1>12){e.textContent="連續節數超過第十二節。";return}
   if(!roomStop(room)){e.textContent="無法判斷「"+room+"」在哪一棟建築，請輸入如 N207、504-1，或建築名稱（例如 懷恩館籃球場）。";return}
   e.textContent="";
-  TT.rows.push({id:uid(),wd:wd,p:p,n:n,name:$("cName").value.trim(),room:room});
-  saveTT();drawCourses();$("cName").value="";$("cRoom").value="";
+  var row=editId&&TT.rows.filter(function(r){return r.id===editId})[0];
+  if(row){row.wd=wd;row.p=p;row.n=n;row.name=$("cName").value.trim();row.room=room}
+  else TT.rows.push({id:uid(),wd:wd,p:p,n:n,name:$("cName").value.trim(),room:room});
+  saveTT();exitEdit();
 };
+function exitEdit(){
+  editId=null;$("cName").value="";$("cRoom").value="";
+  $("cAdd").textContent="新增課程";$("cCancel").hidden=true;$("cMode").textContent="";drawCourses();
+}
+$("cCancel").onclick=exitEdit;
 $("cGrid").addEventListener("click",function(e){
   var b=e.target.closest("button");
-  if(b){var id=b.dataset.id;TT.rows=TT.rows.filter(function(r){return r.id!==id});saveTT();drawCourses();return}
-  var td=e.target.closest("td.e");
-  if(td){$("cWd").value=td.dataset.wd;$("cP").value=td.dataset.p;$("cRoom").focus()}
+  if(b){
+    var id=b.dataset.id;TT.rows=TT.rows.filter(function(r){return r.id!==id});saveTT();
+    if(editId===id)exitEdit();else drawCourses();
+    return;
+  }
+  var td=e.target.closest("td");if(!td)return;
+  if(td.classList.contains("e")){
+    if(editId)exitEdit();
+    $("cWd").value=td.dataset.wd;$("cP").value=td.dataset.p;$("cRoom").focus();return;
+  }
+  var d=e.target.closest("div[data-id]"),cid=d?d.dataset.id:td.dataset.id;
+  var r=TT.rows.filter(function(x){return x.id===cid})[0];if(!r)return;
+  editId=r.id;
+  $("cWd").value=r.wd;$("cP").value=r.p;$("cN").value=r.n;$("cName").value=r.name||"";$("cRoom").value=r.room;
+  $("cErr").textContent="";$("cAdd").textContent="儲存修改";$("cCancel").hidden=false;
+  $("cMode").textContent="正在修改：週"+WORD[r.wd]+" "+(r.name||r.room)+"。改好後按「儲存修改」。";
+  drawCourses();$("cWd").scrollIntoView({behavior:"smooth",block:"center"});
 });
 $("hm").addEventListener("change",function(){$("hmNote").textContent="尚未儲存，請按「儲存」。"});
 $("hmSave").onclick=function(){
