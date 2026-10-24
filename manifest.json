@@ -1,0 +1,14 @@
+{
+  "name": "佛光大學校車",
+  "short_name": "佛光校車",
+  "start_url": "./schedule.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#10201e",
+  "theme_color": "#1c6b66",
+  "lang": "zh-Hant",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

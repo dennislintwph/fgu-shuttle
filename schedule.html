@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>佛光大學校內接駁車查詢</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="theme-color" content="#1c6b66">
 <style>
 :root{--bg:#eaf0ee;--panel:#f8fbfa;--ink:#18302d;--muted:#5b726e;--line:#c9d7d3;--accent:#1c6b66;--on:#fff;--mark:#e0a21b;--err:#b3361f}
 @media(prefers-color-scheme:dark){:root{--bg:#10201e;--panel:#182b28;--ink:#e4efec;--muted:#9bb3ae;--line:#2c4440;--accent:#58b8ae;--on:#0b1a18;--mark:#f0b83a;--err:#f08c72}}
@@ -117,6 +121,12 @@ td input,td select{width:100%}
     <div class="row" style="margin-top:8px"><input type="date" id="pvDate" aria-label="日期"><button type="button" id="pvGo">預覽這天的提醒</button></div>
     <div id="pvOut" aria-live="polite"></div>
   </div>
+  <div class="panel">
+    <h2>手機通知</h2>
+    <p class="note" id="pnStatus"></p>
+    <div class="row" style="margin-top:8px"><button type="button" id="pnOn" hidden>開啟通知</button><button type="button" class="g" id="pnTest" hidden>傳送測試通知</button><button type="button" class="d" id="pnOff" hidden>關閉通知</button></div>
+    <p class="note">通知內容依你儲存的住宿地點和課表計算，涵蓋未來 14 天；課表或住處有變動時會自動更新。請至少每 14 天打開一次網頁，通知才不會中斷。</p>
+  </div>
 </div>
 </main>
 
@@ -155,11 +165,11 @@ function estimate(S){
 function setEst(t){var m=estimate(t.stops);t.stops.forEach(function(s,i){s.est=fmt(m[i])})}
 
 // ---------- 資料 ----------
-var trips=[];
-function ready(first){refreshOptions();if(TT.home)$("hm").value=TT.home;drawCourses();autoDest();if(first)locate()}
+var trips=[],tripsReady=false;
+function ready(first){refreshOptions();if(TT.home)$("hm").value=TT.home;drawCourses();autoDest();schedSync();if(first)locate()}
 fetch("trips.json",{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(d){
   if(!Array.isArray(d.trips))throw 0;
-  trips=d.trips;ready(true);
+  trips=d.trips;tripsReady=true;ready(true);
 }).catch(function(){
   $("loadErr").textContent="無法載入班次資料，請稍後再試。";
   ready(true);
@@ -281,7 +291,7 @@ var WORD=["日","一","二","三","四","五","六"],ORD=[1,2,3,4,5,6,0];
 // 教室代號 → 站點（數字開頭＝雲起樓；C 香雲居不會出現）
 var BLD={L:"城區部",B:"雲五館(圖書館)",D:"雲來集(女生宿舍)",M:"上滴水坊",N:"雲水軒",U:"雲慧樓",V:"海雲館(男生宿舍)",X:"林美寮(宿舍)"};
 var TT=(function(){try{var d=JSON.parse(localStorage.getItem(TKEY));if(d&&Array.isArray(d.rows))return d}catch(e){}return {home:"",rows:[]}})();
-function saveTT(){try{localStorage.setItem(TKEY,JSON.stringify(TT))}catch(e){}}
+function saveTT(){try{localStorage.setItem(TKEY,JSON.stringify(TT))}catch(e){}schedSync()}
 function roomStop(txt){
   txt=String(txt).trim();if(!txt)return null;
   if(txt.indexOf("懷恩館")>-1)return "懷恩館(體育館)";
@@ -325,6 +335,26 @@ function card(r){
       fmt(x.on)+" 在第 "+(x.i+1)+" 站「"+esc(r.from)+"」上車 → "+fmt(x.off)+" 抵達第 "+(x.j+1)+" 站「"+esc(r.to)+"」</div></li>"}).join("")+"</ol>"
     :'<p class="note">沒有可搭乘的班次，不會發送這則通知。</p>';
   return '<div class="panel" style="margin:10px 0 0"><div class="main" style="font-size:1rem">'+fmt(r.at)+" 提醒｜"+r.kind+'</div><div class="detail">'+t+"</div>"+bus+"</div>";
+}
+// ---------- 手機通知：把未來 14 天的提醒整理成「幾點發什麼」 ----------
+var PUSH_DAYS=14,PUSH_MAXBUS=6;
+function pushList(){
+  var out=[],now=Date.now(),d0=new Date();
+  for(var k=0;k<PUSH_DAYS;k++){
+    var d=new Date(d0.getFullYear(),d0.getMonth(),d0.getDate()+k);
+    reminders(d).forEach(function(r){
+      if(!r.buses.length)return;                       // 沒有班次可搭就不發通知
+      var at=d.getTime()+r.at*60000;if(at<=now)return;
+      var b=r.b,nm=b.r.name||b.r.room;
+      var lines=r.buses.slice(0,PUSH_MAXBUS).map(function(x){
+        return x.t.name+" "+x.t.stops[0].name+" "+x.t.stops[0].time+"："+fmt(x.on)+" 上車→"+fmt(x.off)+" 抵達"});
+      if(r.buses.length>PUSH_MAXBUS)lines.push("…共 "+r.buses.length+" 班，詳見網頁");
+      out.push({at:at,
+        title:r.kind==="回住處"?"回住處提醒｜"+fmt(b.e)+" 下課":"去上課提醒｜"+fmt(b.s)+" "+nm,
+        body:"從「"+r.from+"」"+(r.kind==="回住處"?"回":"到")+"「"+r.to+"」：\n"+lines.join("\n")});
+    });
+  }
+  return out;
 }
 /*UI*/
 // 查詢頁的目的站點自動帶入下一堂課的地點（使用者自己改過或清空後就不再自動帶入）
@@ -427,6 +457,73 @@ $("pvGo").onclick=function(){
     (R.length?R.map(card).join(""):(TT.home?'<p class="note">這天不需要提醒（住處和教室在同一站）。</p>':""));
 };
 drawCourses();
+// ---------- 手機通知（網頁推播）----------
+var PUSH=null,pnTimer=null,pnCount=null;
+function pnSay(t){$("pnStatus").textContent=t}
+function u8(s){s=s.replace(/-/g,"+").replace(/_/g,"/");while(s.length%4)s+="=";var r=atob(s),a=new Uint8Array(r.length);for(var i=0;i<r.length;i++)a[i]=r.charCodeAt(i);return a}
+function isIOS(){return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1)}
+function standalone(){return navigator.standalone||(window.matchMedia&&matchMedia("(display-mode: standalone)").matches)}
+function canPush(){return "serviceWorker" in navigator&&"PushManager" in window&&"Notification" in window}
+function pnApi(path,body){
+  return fetch(PUSH.api+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+    .then(function(r){if(!r.ok)throw new Error("伺服器回應 "+r.status);return r.json()});
+}
+function getSub(){return navigator.serviceWorker.getRegistration().then(function(reg){return reg?reg.pushManager.getSubscription():null})}
+function syncPush(){
+  return getSub().then(function(sub){
+    if(!sub||!PUSH)return null;
+    var list=pushList();
+    return pnApi("/sync",{sub:sub.toJSON(),reminders:list}).then(function(){pnCount=list.length;return list.length});
+  });
+}
+// 課表、住處或班次資料有變動時，稍等一下再把最新的提醒清單送到伺服器
+function schedSync(){
+  if(!tripsReady||!PUSH||!canPush()||Notification.permission!=="granted")return;
+  clearTimeout(pnTimer);
+  pnTimer=setTimeout(function(){syncPush().then(pnUI).catch(function(e){pnSay("同步通知失敗："+e.message)})},800);
+}
+function pnUI(){
+  var on=$("pnOn"),off=$("pnOff"),test=$("pnTest");on.hidden=off.hidden=test.hidden=true;
+  if(!canPush()){
+    pnSay(isIOS()&&!standalone()?"iPhone 要先把這個網頁「加入主畫面」，再從主畫面的圖示打開，才能開啟通知（需要 iOS 16.4 以上）。":"這個瀏覽器不支援網頁通知。");
+    return;
+  }
+  if(!PUSH){pnSay("管理者還沒有設定通知伺服器，暫時無法開啟通知。");return}
+  if(Notification.permission==="denied"){pnSay("通知權限被封鎖了，請到瀏覽器或系統設定裡，允許這個網站發送通知。");return}
+  return getSub().then(function(sub){
+    if(sub&&Notification.permission==="granted"){
+      off.hidden=false;test.hidden=false;
+      pnSay("通知已開啟"+(pnCount==null?"。":"，目前排定未來 "+PUSH_DAYS+" 天共 "+pnCount+" 則提醒。"));
+    }else{on.hidden=false;pnSay("通知還沒有開啟。")}
+  });
+}
+$("pnOn").onclick=function(){
+  if(!tripsReady){pnSay("班次資料還沒載入完成，請稍後再試。");return}
+  Notification.requestPermission().then(function(p){
+    if(p!=="granted")throw new Error("沒有取得通知權限");
+    return navigator.serviceWorker.register("sw.js").then(function(){return navigator.serviceWorker.ready});
+  }).then(function(reg){
+    return reg.pushManager.getSubscription().then(function(s){
+      return s||reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(PUSH.vapidPublicKey)});
+    });
+  }).then(syncPush).then(pnUI).catch(function(e){pnSay("開啟通知失敗："+e.message)});
+};
+$("pnOff").onclick=function(){
+  getSub().then(function(sub){
+    if(!sub)return;
+    return pnApi("/unsubscribe",{endpoint:sub.endpoint}).catch(function(){}).then(function(){return sub.unsubscribe()});
+  }).then(function(){pnCount=null;pnUI()}).catch(function(e){pnSay("關閉通知失敗："+e.message)});
+};
+$("pnTest").onclick=function(){
+  pnSay("傳送中…");
+  getSub().then(function(sub){return pnApi("/test",{sub:sub.toJSON()})}).then(function(r){
+    pnSay(r.ok?"已送出測試通知，幾秒內應該會收到。":"測試失敗（推播服務回應 "+r.status+"），請稍後再試。");
+  }).catch(function(e){pnSay("測試失敗："+e.message)});
+};
+if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){});
+fetch("push-config.json",{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(c){
+  if(c&&c.api&&c.vapidPublicKey)PUSH={api:String(c.api).replace(/\/$/,""),vapidPublicKey:c.vapidPublicKey};
+}).catch(function(){}).then(function(){pnUI();schedSync()});
 </script>
 </body>
 </html>
