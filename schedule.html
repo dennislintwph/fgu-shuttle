@@ -57,6 +57,27 @@ td input,td select{width:100%}
 .grid td.e{cursor:pointer}
 .grid .x{display:block;margin:2px auto 0;height:auto;padding:0 6px;border:0;background:none;color:var(--err)}
 .src{margin-left:auto;padding:8px 4px;color:var(--accent);font-weight:600;text-decoration:underline}
+button.tl{height:auto;padding:0;border:0;background:none;color:inherit;font:inherit;font-size:1.15rem;font-weight:700;text-align:left;cursor:pointer;text-decoration:underline dotted;text-underline-offset:5px}
+button.tl::after{content:" ›";color:var(--accent)}
+.al label.btn{display:inline-flex;align-items:center;height:42px;padding:0 14px}
+#rt{padding:0;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);width:min(520px,calc(100% - 24px));max-height:86vh;overflow:hidden}
+#rt::backdrop{background:rgba(0,0,0,.65)}
+#rt .hd{display:flex;gap:10px;align-items:flex-start;padding:14px 16px;border-bottom:1px solid var(--line)}
+#rt .bd{position:relative;overflow:auto;max-height:calc(86vh - 80px);padding:8px 16px 16px}
+#rtList{list-style:none;margin:0;padding:0}
+#rtList li{display:grid;grid-template-columns:96px 14px 1fr;gap:10px;align-items:start;position:relative;padding:5px 0;margin:0;border:0;border-radius:0;color:var(--muted)}
+#rtList li.on{color:var(--ink)}
+#rtList li::before{content:"";position:absolute;left:112px;top:0;bottom:0;width:2px;background:var(--line)}
+#rtList li:first-child::before{top:16px}
+#rtList li:last-child::before{bottom:calc(100% - 16px)}
+#rtList li.on::before{background:var(--accent)}
+#rtList .t{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+#rtList .dot{position:relative;z-index:1;justify-self:center;width:12px;height:12px;margin-top:5px;border-radius:50%;background:var(--panel);border:2px solid var(--line)}
+#rtList li.on .dot{background:var(--accent);border-color:var(--accent)}
+#rtList b{display:inline-block;min-width:1.5em}
+#rtList em{font-style:normal;font-size:.75rem;color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:0 4px}
+#rtList small{font-size:.75rem;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:0 4px}
+#rtList mark{background:var(--accent);color:var(--on);border-radius:6px;padding:0 6px;font-size:.78rem;font-weight:700}
 </style>
 </head>
 <body>
@@ -87,7 +108,7 @@ td input,td select{width:100%}
     <div class="row"><button type="submit">查詢</button><button type="button" class="g" id="clear">清空條件</button><a class="src" href="https://general.fgu.edu.tw/zh_tw/course1/course1_1" target="_blank" rel="noopener noreferrer" title="班次資料的來源（開啟新分頁）">資訊來源</a></div>
   </form>
   <section id="result" aria-live="polite"></section>
-  <p class="foot">班次資料中已輸入的站點時間直接採用，其餘站點是依站序和經緯度推估的預估值，實際時間可能有差異，請以現場為準。</p>
+  <p class="foot">班次資料中除了第一站的時間為確定時間，其餘站點的到達時間則是依站序和經緯度推估的預估值，實際到達時間可能有差異，請以現場為準。</p>
 </div>
 
 <div id="p3" role="tabpanel" aria-labelledby="tab3" hidden>
@@ -116,6 +137,13 @@ td input,td select{width:100%}
     <p class="note">課表只存在這個瀏覽器裡，不會上傳。</p>
   </div>
   <div class="panel">
+    <h2>匯出與匯入課表</h2>
+    <p class="note">匯出的檔案包含課表和住宿地點，可以存到裝置，或用 LINE、Email 傳給自己，再到另一個瀏覽器匯入。</p>
+    <div class="row al" style="margin-top:8px"><button type="button" id="exShare" hidden>分享檔案</button><button type="button" class="g" id="exSave">儲存檔案</button><label class="btn">匯入課表<input type="file" id="imFile" accept=".json,application/json" hidden></label></div>
+    <p class="note" id="exMsg" aria-live="polite"></p>
+    <div id="imOut"></div>
+  </div>
+  <div class="panel">
     <h2>預覽提醒</h2>
     <p class="note">提醒時間：當天第一堂課前 1 小時、最後一堂課下課前 10 分鐘；整天沒課就沒有提醒。<br>目前只是預覽，尚未真的發送通知。</p>
     <div class="row" style="margin-top:8px"><input type="date" id="pvDate" aria-label="日期"><button type="button" id="pvGo">預覽這天的提醒</button></div>
@@ -128,6 +156,10 @@ td input,td select{width:100%}
     <p class="note">通知內容依你儲存的住宿地點和課表計算，涵蓋未來 14 天；課表或住處有變動時會自動更新。請至少每 14 天打開一次網頁，通知才不會中斷。</p>
   </div>
 </div>
+<dialog id="rt" aria-labelledby="rtTitle">
+  <div class="hd"><div style="flex:1"><h2 id="rtTitle" style="margin:0"></h2><p class="note" id="rtSub" style="margin:2px 0 0"></p></div><button type="button" class="g" id="rtClose">關閉</button></div>
+  <div class="bd" id="rtBody"><ol id="rtList"></ol><p class="note">第一站是確定的發車時間；其餘站點標示「約」，是預估的到達時間，實際可能有差異。</p></div>
+</dialog>
 </main>
 
 <script>
@@ -248,16 +280,16 @@ $("f").addEventListener("submit",function(e){
   if(ok&&from.value===to.value){$("toErr").textContent="目的站點不能和出發站點相同。";ok=false;first=to}
   if(!ok){$("result").innerHTML="";if(first)first.focus();return}
   var o=from.value,d=to.value,dep=+hh.value*60+ +mm.value,dp=$("dd").value.split("-"),rg=$("rng").value,res=search(o,d,dep,new Date(+dp[0],+dp[1]-1,+dp[2]),rg);
-  var head=rg==="all"?"<h2>"+$("dd").value+" 當天從「"+esc(o)+"」前往「"+esc(d)+"」</h2>":"<h2>從「"+esc(o)+"」"+$("dd").value+" "+fmt(dep)+" 出發，前往「"+esc(d)+"」</h2>";
+  lastRes=res;var head=rg==="all"?"<h2>"+$("dd").value+" 當天從「"+esc(o)+"」前往「"+esc(d)+"」</h2>":"<h2>從「"+esc(o)+"」"+$("dd").value+" "+fmt(dep)+" 出發，前往「"+esc(d)+"」</h2>";
   if(!res.length){
     $("result").innerHTML='<div class="panel">'+head+'<p class="note">'+RG[rg].m+'沒有可以搭乘的班次。</p></div>';return;
   }
-  var items=res.map(function(r){
+  var items=res.map(function(r,k){
     var s=r.t.stops;
-    return '<li><div class="main">'+esc(r.t.name)+' '+esc(s[0].name)+' '+esc(s[0].time)+'</div>'+
-      '<div class="detail">預估 '+fmt(r.on)+' 在第 '+(r.i+1)+' 站「'+esc(o)+'」上車，'+fmt(r.off)+' 抵達第 '+(r.j+1)+' 站「'+esc(d)+'」</div></li>';
+    return '<li><div class="main"><button type="button" class="tl" data-k="'+k+'" title="查看這個班次的詳細路線">'+esc(r.t.name)+' '+esc(s[0].name)+' '+esc(s[0].time)+'</button></div>'+
+      '<div class="detail">預估 '+fmt(r.on)+' 在「'+esc(o)+'」上車，'+fmt(r.off)+' 抵達「'+esc(d)+'」</div></li>';
   }).join("");
-  $("result").innerHTML='<div class="panel">'+head+'<p class="note">'+RG[rg].n+'，共 '+res.length+' 個班次。</p><ol class="res">'+items+'</ol></div>';
+  $("result").innerHTML='<div class="panel">'+head+'<p class="note">'+RG[rg].n+'，共 '+res.length+' 個班次。點班次名稱可以查看詳細路線。</p><ol class="res">'+items+'</ol></div>';
 });
 $("clear").addEventListener("click",function(){
   touched=true;toTouched=true;$("toNote").textContent="";from.value="";to.value="";$("dd").value="";hh.value="";mm.value="";$("rng").value="120";
@@ -332,7 +364,7 @@ function card(r){
   else t=fmt(b.s)+" 在「"+esc(r.to)+"」上課（"+nm+"），從「"+esc(r.from)+"」前往";
   var bus=r.buses.length?"<ol>"+r.buses.map(function(x){var S=x.t.stops;
     return '<li><div class="main" style="font-size:1rem">'+esc(x.t.name)+" "+esc(S[0].name)+" "+esc(S[0].time)+'</div><div class="detail">'+
-      fmt(x.on)+" 在第 "+(x.i+1)+" 站「"+esc(r.from)+"」上車 → "+fmt(x.off)+" 抵達第 "+(x.j+1)+" 站「"+esc(r.to)+"」</div></li>"}).join("")+"</ol>"
+      fmt(x.on)+" 在「"+esc(r.from)+"」上車 → "+fmt(x.off)+" 抵達「"+esc(r.to)+"」</div></li>"}).join("")+"</ol>"
     :'<p class="note">沒有可搭乘的班次，不會發送這則通知。</p>';
   return '<div class="panel" style="margin:10px 0 0"><div class="main" style="font-size:1rem">'+fmt(r.at)+" 提醒｜"+r.kind+'</div><div class="detail">'+t+"</div>"+bus+"</div>";
 }
@@ -355,6 +387,50 @@ function pushList(){
     });
   }
   return out;
+}
+// ---------- 班次的詳細路線（由第一站一路列到最後一站） ----------
+function routeHtml(r){
+  var S=r.t.stops,tm=estimate(S);
+  return S.map(function(s,i){
+    var on=i>=r.i&&i<=r.j;
+    return '<li class="'+(on?"on":"")+'"><span class="t">'+(i===0?esc(s.time)+' <em>確定</em>':'約 '+fmt(tm[i]))+'</span><span class="dot"></span><span class="s"><b>'+(i+1)+'</b> '+esc(s.name)+' <small>'+(s.campus?"校內":"校外")+'</small>'+(i===r.i?' <mark>上車</mark>':'')+(i===r.j?' <mark>下車</mark>':'')+'</span></li>';
+  }).join("");
+}
+// ---------- 課表匯出與匯入 ----------
+function overlap(a,b){return a.wd===b.wd&&a.p<=b.p+b.n-1&&b.p<=a.p+a.n-1}
+function exportData(){
+  return {app:"fgu-shuttle",type:"timetable",version:1,exported:new Date().toISOString(),home:TT.home||"",
+    rows:TT.rows.map(function(r){return {wd:r.wd,p:r.p,n:r.n,name:r.name||"",room:r.room}})};
+}
+function exportName(){var d=new Date();return "佛光校車網頁-課表-"+d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+".json"}
+function parseImport(text){
+  var d;try{d=JSON.parse(text)}catch(e){d=null}
+  if(!d||d.type!=="timetable"||!Array.isArray(d.rows))return {ok:false,error:"這個檔案不是「佛光校車網頁」匯出的課表檔案。"};
+  if(d.version!==1)return {ok:false,error:"這個檔案的格式版本目前不支援。"};
+  if(d.rows.length>200)return {ok:false,error:"課程數量過多，無法匯入。"};
+  var rows=[],skipped=[];
+  d.rows.forEach(function(r){
+    var desc=r&&typeof r==="object"?String(r.name||r.room||"（未命名）").slice(0,30):"（無法讀取）";
+    var good=r&&typeof r==="object"&&Number.isInteger(r.wd)&&r.wd>=0&&r.wd<=6&&Number.isInteger(r.p)&&r.p>=1&&r.p<=12&&Number.isInteger(r.n)&&r.n>=1&&r.p+r.n-1<=12&&
+      typeof r.room==="string"&&r.room.trim()!==""&&r.room.length<=40&&(r.name==null||(typeof r.name==="string"&&r.name.length<=60));
+    if(!good){skipped.push(desc+"：格式不正確");return}
+    var c={wd:r.wd,p:r.p,n:r.n,name:String(r.name||"").trim(),room:r.room.trim()};
+    if(!roomStop(c.room)){skipped.push(desc+"：無法辨識教室「"+c.room+"」");return}
+    var bad=rows.filter(function(x){return overlap(x,c)})[0];
+    if(bad){skipped.push(desc+"：和「"+(bad.name||bad.room)+"」時間衝突");return}
+    rows.push(c);
+  });
+  return {ok:true,rows:rows,skipped:skipped,total:d.rows.length,home:typeof d.home==="string"?d.home.trim().slice(0,60):"",exported:typeof d.exported==="string"?d.exported.slice(0,10):""};
+}
+function applyImport(P,replace,withHome){
+  var before=TT.rows.length,base=replace?[]:TT.rows.slice(),skipped=P.skipped.slice(),added=0;
+  P.rows.forEach(function(c){
+    var bad=base.filter(function(x){return overlap(x,c)})[0];
+    if(bad){skipped.push((c.name||c.room)+"：和目前的「"+(bad.name||bad.room)+"」時間衝突");return}
+    base.push({id:uid(),wd:c.wd,p:c.p,n:c.n,name:c.name,room:c.room});added++;
+  });
+  TT.rows=base;if(withHome&&P.home)TT.home=P.home;saveTT();
+  return {added:added,before:before,skipped:skipped};
 }
 /*UI*/
 // 查詢頁的目的站點自動帶入下一堂課的地點（使用者自己改過或清空後就不再自動帶入）
@@ -457,6 +533,88 @@ $("pvGo").onclick=function(){
     (R.length?R.map(card).join(""):(TT.home?'<p class="note">這天不需要提醒（住處和教室在同一站）。</p>':""));
 };
 drawCourses();
+// ---------- 路線詳情視窗 ----------
+var lastRes=[];
+function showRoute(k){
+  var r=lastRes[k];if(!r)return;
+  var t=r.t,S=t.stops;
+  $("rtTitle").textContent=t.name+" "+S[0].name+" "+S[0].time;
+  $("rtSub").textContent="所屬路線："+t.line+"｜適用日期："+appText(t);
+  $("rtList").innerHTML=routeHtml(r);
+  $("rt").showModal();
+  var on=$("rtList").querySelector("li.on"),bd=$("rtBody");
+  if(on)bd.scrollTop=Math.max(0,on.offsetTop-bd.clientHeight/3);
+}
+$("result").addEventListener("click",function(e){var b=e.target.closest("button.tl");if(b)showRoute(+b.dataset.k)});
+$("rtClose").onclick=function(){$("rt").close()};
+$("rt").addEventListener("click",function(e){if(e.target===this)this.close()});
+
+// ---------- 課表匯出與匯入 ----------
+var imParsed=null;
+function exMsg(t){$("exMsg").textContent=t}
+function hasData(){return TT.rows.length>0||!!TT.home}
+try{
+  var probe=new File(["{}"],"x.json",{type:"application/json"});
+  if(navigator.canShare&&navigator.canShare({files:[probe]}))$("exShare").hidden=false;
+}catch(e){}
+$("exShare").onclick=function(){
+  if(!hasData()){exMsg("目前沒有課表或住宿地點可以匯出。");return}
+  var f=new File([JSON.stringify(exportData(),null,2)],exportName(),{type:"application/json"});
+  navigator.share({files:[f],title:"佛光校車課表"}).then(function(){exMsg("已開啟分享。")})
+    .catch(function(e){if(!e||e.name!=="AbortError")exMsg("分享失敗，請改用「儲存檔案」。")});
+};
+$("exSave").onclick=function(){
+  if(!hasData()){exMsg("目前沒有課表或住宿地點可以匯出。");return}
+  var name=exportName(),text=JSON.stringify(exportData(),null,2);
+  if(window.showSaveFilePicker){
+    window.showSaveFilePicker({suggestedName:name,types:[{description:"課表檔案",accept:{"application/json":[".json"]}}]})
+      .then(function(h){return h.createWritable().then(function(w){return w.write(text).then(function(){return w.close()})})})
+      .then(function(){exMsg("已儲存檔案。")})
+      .catch(function(e){if(!e||e.name!=="AbortError")exMsg("儲存失敗，請再試一次。")});
+    return;
+  }
+  var a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([text],{type:"application/json"}));a.download=name;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(function(){URL.revokeObjectURL(a.href)},10000);
+  exMsg("已下載檔案「"+name+"」，請到瀏覽器的下載資料夾找它。");
+};
+function showImport(fname){
+  var P=imParsed;
+  $("imOut").innerHTML='<div class="panel" style="margin:10px 0 0"><h2>匯入摘要</h2>'+
+    '<p class="note">檔案：'+esc(fname)+(P.exported?'（匯出日期 '+esc(P.exported)+'）':'')+'</p>'+
+    '<p>共 '+P.total+' 門課，可匯入 <b>'+P.rows.length+'</b> 門'+(P.skipped.length?'，略過 '+P.skipped.length+' 門：':'。')+'</p>'+
+    P.skipped.map(function(x){return '<p class="note" style="margin:2px 0">'+esc(x)+'</p>'}).join("")+
+    (P.home?'<p><label style="font-weight:400"><input type="checkbox" id="imHome" checked> 同時套用住宿地點「'+esc(P.home)+'」</label></p>':'<p class="note">這個檔案沒有住宿地點。</p>')+
+    '<div class="field" style="margin-top:8px"><label style="font-weight:400"><input type="radio" name="imMode" value="replace" checked> 取代目前的課表（目前有 '+TT.rows.length+' 門課，會被刪除）</label>'+
+    '<label style="font-weight:400"><input type="radio" name="imMode" value="merge"> 合併到目前的課表（時間衝突的課會略過）</label></div>'+
+    '<div class="row"><button type="button" id="imGo">確認匯入</button><button type="button" class="g" id="imNo">取消</button></div></div>';
+}
+$("imFile").onchange=function(){
+  var f=this.files[0];this.value="";if(!f)return;
+  imParsed=null;$("imOut").innerHTML="";
+  if(f.size>200000){exMsg("檔案太大，不是課表檔案。");return}
+  var rd=new FileReader();
+  rd.onload=function(){
+    var P=parseImport(String(rd.result));
+    if(!P.ok){exMsg(P.error);return}
+    imParsed=P;exMsg("");showImport(f.name);
+  };
+  rd.onerror=function(){exMsg("讀取檔案失敗。")};
+  rd.readAsText(f);
+};
+$("imOut").addEventListener("click",function(e){
+  var b=e.target.closest("button");if(!b||!imParsed)return;
+  if(b.id==="imNo"){imParsed=null;$("imOut").innerHTML="";return}
+  if(b.id!=="imGo")return;
+  var mode=document.querySelector('input[name="imMode"]:checked'),hm=$("imHome");
+  var replace=!mode||mode.value==="replace",withHome=!!(hm&&hm.checked&&imParsed.home),P=imParsed;
+  var r=applyImport(P,replace,withHome);
+  if(editId)exitEdit();else drawCourses();
+  if(withHome){$("hm").value=TT.home;if($("hm").value!==TT.home)$("hm").value=""}
+  exMsg("已匯入 "+r.added+" 門課"+(replace?"（取代原本的 "+r.before+" 門課）":"（合併到目前的課表）")+(withHome?"，並套用住宿地點「"+P.home+"」":"")+(r.skipped.length?"；略過 "+r.skipped.length+" 門":"")+"。");
+  imParsed=null;$("imOut").innerHTML="";
+});
 // ---------- 手機通知（網頁推播）----------
 var PUSH=null,pnTimer=null,pnCount=null;
 function pnSay(t){$("pnStatus").textContent=t}
