@@ -57,8 +57,7 @@ td input,td select{width:100%}
 .grid td.e{cursor:pointer}
 .grid .x{display:block;margin:2px auto 0;height:auto;padding:0 6px;border:0;background:none;color:var(--err)}
 .src{margin-left:auto;padding:8px 4px;color:var(--accent);font-weight:600;text-decoration:underline}
-button.tl{height:auto;padding:0;border:0;background:none;color:inherit;font:inherit;font-size:1.15rem;font-weight:700;text-align:left;cursor:pointer;text-decoration:underline dotted;text-underline-offset:5px}
-button.tl::after{content:" ›";color:var(--accent)}
+button.tl{height:auto;padding:0;border:0;background:none;color:inherit;font:inherit;font-size:1.15rem;font-weight:700;text-align:left;cursor:pointer;text-decoration:underline dashed;text-underline-offset:5px}
 .al label.btn{display:inline-flex;align-items:center;height:42px;padding:0 14px}
 #rt{padding:0;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);width:min(520px,calc(100% - 24px));max-height:86vh;overflow:hidden}
 #rt::backdrop{background:rgba(0,0,0,.65)}
@@ -71,6 +70,9 @@ button.tl::after{content:" ›";color:var(--accent)}
 #rtList li:first-child::before{top:16px}
 #rtList li:last-child::before{bottom:calc(100% - 16px)}
 #rtList li.on::before{background:var(--accent)}
+#rtList li.on.st::before{background:linear-gradient(to bottom,var(--line) 0,var(--line) 16px,var(--accent) 16px,var(--accent) 100%)}
+#rtList li.on.en::before{background:linear-gradient(to bottom,var(--accent) 0,var(--accent) 16px,var(--line) 16px,var(--line) 100%)}
+#rtList li.on.st:first-child::before,#rtList li.on.en:last-child::before{background:var(--accent)}
 #rtList .t{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 #rtList .dot{position:relative;z-index:1;justify-self:center;width:12px;height:12px;margin-top:5px;border-radius:50%;background:var(--panel);border:2px solid var(--line)}
 #rtList li.on .dot{background:var(--accent);border-color:var(--accent)}
@@ -138,8 +140,8 @@ button.tl::after{content:" ›";color:var(--accent)}
   </div>
   <div class="panel">
     <h2>匯出與匯入課表</h2>
-    <p class="note">匯出的檔案包含課表和住宿地點，可以存到裝置，或用 LINE、Email 傳給自己，再到另一個瀏覽器匯入。</p>
-    <div class="row al" style="margin-top:8px"><button type="button" id="exShare" hidden>分享檔案</button><button type="button" class="g" id="exSave">儲存檔案</button><label class="btn">匯入課表<input type="file" id="imFile" accept=".json,application/json" hidden></label></div>
+    <p class="note">匯出的檔案包含課表和住宿地點。儲存檔案後，可以用 LINE 或 Email 傳給自己，再到另一個瀏覽器匯入。</p>
+    <div class="row al" style="margin-top:8px"><button type="button" class="g" id="exSave">儲存檔案</button><label class="btn">匯入課表<input type="file" id="imFile" accept=".json,application/json" hidden></label></div>
     <p class="note" id="exMsg" aria-live="polite"></p>
     <div id="imOut"></div>
   </div>
@@ -393,7 +395,7 @@ function routeHtml(r){
   var S=r.t.stops,tm=estimate(S);
   return S.map(function(s,i){
     var on=i>=r.i&&i<=r.j;
-    return '<li class="'+(on?"on":"")+'"><span class="t">'+(i===0?esc(s.time)+' <em>確定</em>':'約 '+fmt(tm[i]))+'</span><span class="dot"></span><span class="s"><b>'+(i+1)+'</b> '+esc(s.name)+' <small>'+(s.campus?"校內":"校外")+'</small>'+(i===r.i?' <mark>上車</mark>':'')+(i===r.j?' <mark>下車</mark>':'')+'</span></li>';
+    return '<li class="'+(on?"on":"")+(i===r.i?" st":"")+(i===r.j?" en":"")+'"><span class="t">'+(i===0?esc(s.time)+' <em>確定</em>':'約 '+fmt(tm[i]))+'</span><span class="dot"></span><span class="s"><b>'+(i+1)+'</b> '+esc(s.name)+' <small>'+(s.campus?"校內":"校外")+'</small>'+(i===r.i?' <mark>上車</mark>':'')+(i===r.j?' <mark>下車</mark>':'')+'</span></li>';
   }).join("");
 }
 // ---------- 課表匯出與匯入 ----------
@@ -553,16 +555,6 @@ $("rt").addEventListener("click",function(e){if(e.target===this)this.close()});
 var imParsed=null;
 function exMsg(t){$("exMsg").textContent=t}
 function hasData(){return TT.rows.length>0||!!TT.home}
-try{
-  var probe=new File(["{}"],"x.json",{type:"application/json"});
-  if(navigator.canShare&&navigator.canShare({files:[probe]}))$("exShare").hidden=false;
-}catch(e){}
-$("exShare").onclick=function(){
-  if(!hasData()){exMsg("目前沒有課表或住宿地點可以匯出。");return}
-  var f=new File([JSON.stringify(exportData(),null,2)],exportName(),{type:"application/json"});
-  navigator.share({files:[f],title:"佛光校車課表"}).then(function(){exMsg("已開啟分享。")})
-    .catch(function(e){if(!e||e.name!=="AbortError")exMsg("分享失敗，請改用「儲存檔案」。")});
-};
 $("exSave").onclick=function(){
   if(!hasData()){exMsg("目前沒有課表或住宿地點可以匯出。");return}
   var name=exportName(),text=JSON.stringify(exportData(),null,2);
